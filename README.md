@@ -1,5 +1,6 @@
 # spotstream
 
+[![Crates.io](https://img.shields.io/crates/v/spotstream?logo=rust&logoColor=white)](https://crates.io/crates/spotstream)
 [![Rust](https://img.shields.io/badge/Rust-1.85+-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![librespot](https://img.shields.io/badge/librespot-0.8.0-1DB954?logo=spotify&logoColor=white)](https://github.com/librespot-org/librespot)
 [![License](https://img.shields.io/badge/License-MIT-white)](./LICENSE)
