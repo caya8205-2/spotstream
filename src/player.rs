@@ -115,9 +115,11 @@ pub async fn stream_track(cache_dir: &Path, track_input: &str) -> Result<()> {
     let track_id = parse_track_id(track_input)?;
     let session = get_session(cache_dir).await?;
 
-    let mut player_config = PlayerConfig::default();
-    player_config.bitrate = Bitrate::Bitrate320;
-    player_config.gapless = false;
+    let player_config = PlayerConfig {
+        bitrate: Bitrate::Bitrate320,
+        gapless: false,
+        ..Default::default()
+    };
 
     let audio_format = AudioFormat::S16;
     let backend = audio_backend::find(Some("pipe".to_string()))
