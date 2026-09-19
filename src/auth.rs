@@ -93,8 +93,6 @@ pub async fn poll_and_save(
     let poll_interval = Duration::from_secs(interval.max(3));
 
     let access_token = loop {
-        tokio::time::sleep(poll_interval).await;
-
         if start_time.elapsed() > timeout {
             bail!("Device authorization pairing timed out after {} seconds.", expires_in);
         }
@@ -113,6 +111,7 @@ pub async fn poll_and_save(
             Ok(r) => r,
             Err(err) => {
                 eprintln!("[spotstream] Network warning while polling: {err}");
+                tokio::time::sleep(poll_interval).await;
                 continue;
             }
         };
@@ -130,6 +129,7 @@ pub async fn poll_and_save(
             if err_data.error == "authorization_pending" {
                 eprint!(".");
                 let _ = std::io::Write::flush(&mut std::io::stderr());
+                tokio::time::sleep(poll_interval).await;
                 continue;
             } else if err_data.error == "slow_down" {
                 tokio::time::sleep(Duration::from_secs(5)).await;
@@ -150,6 +150,12 @@ pub async fn poll_and_save(
     let cache = Cache::new(Some(cache_dir.to_path_buf()), None, None, None)
         .context("Failed to initialize Spotify cache directory")?;
 
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(cache_dir, std::fs::Permissions::from_mode(0o700));
+    }
+
     let session = Session::new(session_config, Some(cache));
     let credentials = Credentials::with_access_token(access_token);
 
@@ -157,6 +163,15 @@ pub async fn poll_and_save(
         .connect(credentials, true)
         .await
         .context("Failed to connect to Spotify AP with access token")?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let cred_file = cache_dir.join("credentials.json");
+        if cred_file.is_file() {
+            let _ = std::fs::set_permissions(&cred_file, std::fs::Permissions::from_mode(0o600));
+        }
+    }
 
     eprintln!("[spotstream] Reusable credentials successfully saved to: {}", cache_dir.display());
     session.shutdown();

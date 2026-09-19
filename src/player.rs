@@ -1,6 +1,6 @@
 //! Spotify playback, track streaming, and metadata fetching module.
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use librespot::core::{
     SpotifyUri,
     cache::Cache,
@@ -13,10 +13,11 @@ use librespot::playback::{
     audio_backend,
     config::{AudioFormat, Bitrate, PlayerConfig},
     mixer::NoOpVolume,
-    player::Player,
+    player::{Player, PlayerEvent},
 };
 use serde::Serialize;
 use std::path::Path;
+use std::time::Duration;
 
 /// Parse a track ID from raw base62 string, Spotify URI (`spotify:track:...`), or web URL.
 pub fn parse_track_id(input: &str) -> Result<SpotifyId> {
@@ -132,10 +133,49 @@ pub async fn stream_track(cache_dir: &Path, track_input: &str) -> Result<()> {
     let track_uri = SpotifyUri::Track { id: track_id };
     let base62_id = track_id.to_base62().unwrap_or_else(|_| "unknown".to_string());
     eprintln!("[spotstream] Loading track {}...", base62_id);
+
+    let mut event_channel = player.get_player_event_channel();
     player.load(track_uri, true, 0);
 
     eprintln!("[spotstream] Streaming PCM s16le 44100Hz stereo to stdout...");
-    player.await_end_of_track().await;
+
+    // Protect against hanging indefinitely if track is unavailable, region-blocked, or failed
+    let startup_timeout = Duration::from_secs(15);
+    let mut playback_started = false;
+
+    loop {
+        let event = if !playback_started {
+            match tokio::time::timeout(startup_timeout, event_channel.recv()).await {
+                Ok(Some(ev)) => ev,
+                Ok(None) => bail!("Player event channel closed before playback started"),
+                Err(_) => {
+                    player.stop();
+                    session.shutdown();
+                    bail!("Timeout waiting for playback to start (track may be unavailable or network dropped)");
+                }
+            }
+        } else {
+            match event_channel.recv().await {
+                Some(ev) => ev,
+                None => break,
+            }
+        };
+
+        match event {
+            PlayerEvent::Playing { .. } => {
+                playback_started = true;
+            }
+            PlayerEvent::Unavailable { .. } => {
+                player.stop();
+                session.shutdown();
+                bail!("Track is unavailable (region-locked, removed, or failed to decrypt)");
+            }
+            PlayerEvent::EndOfTrack { .. } | PlayerEvent::Stopped { .. } => {
+                break;
+            }
+            _ => {}
+        }
+    }
 
     eprintln!("[spotstream] Finished streaming track.");
     session.shutdown();
