@@ -8,7 +8,7 @@ mod player;
 
 #[derive(Parser)]
 #[command(name = "spotstream")]
-#[command(author = "Caya <caya8205@users.noreply.github.com>")]
+#[command(author = "Caya <caya8205-2@users.noreply.github.com>")]
 #[command(version = "0.1.0")]
 #[command(about = "High-performance Spotify streaming CLI adapter for Discord bots and audio pipelines", long_about = None)]
 struct Cli {
@@ -51,6 +51,19 @@ enum Commands {
     Info {
         /// Spotify track ID, URI, or track URL
         track: String,
+    },
+
+    /// Retrieve playlist metadata and track list as JSON
+    Playlist {
+        /// Spotify playlist ID, URI, or URL
+        playlist: String,
+    },
+
+    /// Get a fresh authenticated Spotify access token for user
+    Token {
+        /// Requested OAuth scopes (comma-separated, default: playlist-read-private,playlist-read-collaborative,streaming)
+        #[arg(short, long, default_value = "playlist-read-private,playlist-read-collaborative,streaming")]
+        scopes: String,
     },
 }
 
@@ -124,6 +137,16 @@ async fn main() -> Result<()> {
         Commands::Info { track } => {
             let info = player::fetch_track_info(&cache_dir, &track).await?;
             println!("{}", serde_json::to_string_pretty(&info)?);
+        }
+        Commands::Playlist { playlist } => {
+            let info = player::fetch_playlist_info(&cache_dir, &playlist).await?;
+            println!("{}", serde_json::to_string_pretty(&info)?);
+        }
+        Commands::Token { scopes } => {
+            let session = player::get_session(&cache_dir).await?;
+            let token = session.token_provider().get_token(&scopes).await?;
+            println!("{}", token.access_token);
+            session.shutdown();
         }
     }
 

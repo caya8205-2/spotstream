@@ -6,7 +6,7 @@ use librespot::core::{
     session::Session,
     spotify_id::SpotifyId,
 };
-use librespot::metadata::{Metadata, Track};
+use librespot::metadata::{Metadata, Track, Playlist};
 use librespot::playback::{
     audio_backend,
     config::{AudioFormat, Bitrate, PlayerConfig},
@@ -29,6 +29,21 @@ pub fn parse_track_id(input: &str) -> Result<SpotifyId> {
 
     SpotifyId::from_base62(id_str)
         .map_err(|e| anyhow::anyhow!("Invalid Spotify track ID or URI '{id_str}': {e}"))
+}
+
+pub fn parse_playlist_id(input: &str) -> Result<SpotifyId> {
+    let clean = input.trim();
+    let id_str = if clean.starts_with("spotify:playlist:") {
+        clean.strip_prefix("spotify:playlist:").unwrap()
+    } else if let Some(idx) = clean.find("/playlist/") {
+        let after = &clean[idx + 10..];
+        after.split('?').next().unwrap_or(after)
+    } else {
+        clean
+    };
+
+    SpotifyId::from_base62(id_str)
+        .map_err(|e| anyhow::anyhow!("Invalid Spotify playlist ID or URI '{id_str}': {e}"))
 }
 
 pub async fn get_session(cache_dir: &Path) -> Result<Session> {
@@ -110,4 +125,51 @@ pub async fn stream_track(cache_dir: &Path, track_input: &str) -> Result<()> {
     eprintln!("[spotstream] Finished streaming track.");
     session.shutdown();
     Ok(())
+}
+
+#[derive(Serialize)]
+pub struct PlaylistItemInfo {
+    pub id: String,
+    pub uri: String,
+}
+
+#[derive(Serialize)]
+pub struct PlaylistInfo {
+    pub name: String,
+    pub description: String,
+    pub tracks: Vec<PlaylistItemInfo>,
+}
+
+pub async fn fetch_playlist_info(cache_dir: &Path, playlist_input: &str) -> Result<PlaylistInfo> {
+    let playlist_id = parse_playlist_id(playlist_input)?;
+    let session = get_session(cache_dir).await?;
+
+    let playlist_uri = SpotifyUri::Playlist {
+        id: playlist_id,
+        user: None,
+    };
+
+    let playlist = Playlist::get(&session, &playlist_uri)
+        .await
+        .context("Failed to fetch playlist metadata from Spotify")?;
+
+    let mut tracks = Vec::new();
+    for item in playlist.contents.items.0 {
+        if let SpotifyUri::Track { id } = item.id {
+            let base62 = id.to_base62().unwrap_or_else(|_| "unknown".to_string());
+            tracks.push(PlaylistItemInfo {
+                id: base62.clone(),
+                uri: format!("spotify:track:{base62}"),
+            });
+        }
+    }
+
+    let info = PlaylistInfo {
+        name: playlist.attributes.name,
+        description: playlist.attributes.description,
+        tracks,
+    };
+
+    session.shutdown();
+    Ok(info)
 }

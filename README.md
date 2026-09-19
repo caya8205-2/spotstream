@@ -1,28 +1,60 @@
-# spotstream
+<div align="center">
+  <br/>
+  <h1>spotstream</h1>
+  <p align="center">
+    <strong>
+      A lightweight, headless Spotify audio streaming CLI adapter built on <a href="https://github.com/librespot-org/librespot">librespot</a>.
+    </strong>
+  </p>
 
-High-performance Spotify streaming CLI adapter for Discord bots, media servers, and audio pipelines. Built with Rust and `librespot`.
+  [![Rust](https://img.shields.io/badge/Rust-1.85+-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
+  [![librespot](https://img.shields.io/badge/librespot-0.8.0-1DB954?logo=spotify&logoColor=white)](https://github.com/librespot-org/librespot)
+  [![License](https://img.shields.io/badge/License-MIT-white)](./LICENSE)
+
+  <p align="center">
+    <code>spotstream</code> decodes Spotify audio directly from Spotify CDN and streams raw PCM (<code>s16le</code>, 44.1kHz stereo) straight to <code>stdout</code>. Built for Discord bots, media servers, and FFmpeg pipelines.
+  </p>
+</div>
+
+---
 
 ## Features
-- **Direct Spotify Decryption**: Streams high quality (320kbps) audio directly from Spotify CDN without YouTube matching or scraping.
-- **Fast Startup**: Decodes raw Vorbis audio and outputs PCM (`s16le`, 44.1kHz, stereo) straight to `stdout` for instant FFmpeg ingestion.
-- **Device Authorization (RFC 8628)**: Easy one-time OAuth pairing via `https://spotify.com/pair`. No plaintext passwords in config files.
-- **CLI & Bot Automation Modes**: Supports interactive terminal pairing (`auth`) and machine-readable JSON pairing (`auth-code` / `auth-poll`).
-- **Reusable Session Cache**: Session tokens stored securely in `%LOCALAPPDATA%/spotstream/cache` (or custom `--cache-dir`).
+
+- **Direct Spotify Decryption**: Fetches audio keys via Spotify's Mercury/AP protocol and decrypts 320kbps Vorbis streams without YouTube conversion or scraping.
+- **Raw PCM Pipe**: Emits decoded `s16le` 44100Hz stereo PCM directly to `stdout` for zero-latency FFmpeg transcoding.
+- **RFC 8628 Device Pairing**: Quick one-time authorization via `https://spotify.com/pair`. No plaintext credentials stored in configs.
+- **Personalized Playlist Support**: Reads standard playlists as well as dynamic personalized playlists (Daily Mix, Made for You, Discover Weekly) via internal Mercury endpoints.
+- **Machine-Readable CLI**: Supports JSON output for track info, playlist dumps, and headless OAuth pairing (`auth-code` / `auth-poll`).
+- **Persistent Session Cache**: Automatically reuses saved tokens from `%LOCALAPPDATA%/spotstream/cache` (Windows) or `~/.local/share/spotstream/cache` (Linux/macOS).
+
+---
+
+## Installation
+
+### Build from Source
+```bash
+git clone https://github.com/caya8205-2/spotstream.git
+cd spotstream
+cargo build --release
+```
+The compiled binary will be located at `target/release/spotstream.exe` (or `target/release/spotstream` on Unix).
+
+---
 
 ## Usage
 
-### 1. Authorize (One-Time)
+### 1. One-Time Authorization
 ```bash
 spotstream auth
 ```
-This requests a pairing code from Spotify, opens `https://spotify.com/pair` in your browser, and waits for your confirmation.
+Opens `https://spotify.com/pair` in your browser with a generated user code. Approve the device on your Spotify Premium account to save reusable session credentials.
 
-Or for headless / bot automation:
+For headless / automated bot flows:
 ```bash
-# Request code as JSON
+# Request pairing code as JSON
 spotstream auth-code
 
-# Poll until user approves
+# Poll until approved
 spotstream auth-poll --device-code "<DEVICE_CODE>"
 ```
 
@@ -31,16 +63,51 @@ spotstream auth-poll --device-code "<DEVICE_CODE>"
 spotstream status
 ```
 
-### 3. Stream a Track (Stdout Pipe)
+### 3. Stream Audio to FFmpeg (Stdout Pipe)
 ```bash
 # Pipe raw PCM into FFmpeg
-spotstream stream "spotify:track:4cOdK2wGLETKBW3PvgPWqT" | ffmpeg -f s16le -ar 44100 -ac 2 -i pipe:0 output.ogg
+spotstream stream "4cOdK2wGLETKBW3PvgPWqT" | ffmpeg -f s16le -ar 44100 -ac 2 -i pipe:0 -c:a libopus -f ogg output.ogg
 ```
 
-### 4. Fetch Track Info
+### 4. Fetch Track Metadata
 ```bash
 spotstream info "4cOdK2wGLETKBW3PvgPWqT"
 ```
 
+Output:
+```json
+{
+  "id": "4cOdK2wGLETKBW3PvgPWqT",
+  "title": "Never Gonna Give You Up",
+  "artists": [
+    "Rick Astley"
+  ],
+  "album": "Whenever You Need Somebody",
+  "duration_ms": 213573
+}
+```
+
+### 5. Fetch Playlist & Daily Mix Tracks
+```bash
+spotstream playlist "https://open.spotify.com/playlist/37i9dQZF1E38AosGk0ttnv"
+```
+
+Output:
+```json
+{
+  "name": "Daily Mix 3",
+  "description": "Kanaria, IRyS, しぐれうい and more",
+  "tracks": [
+    {
+      "id": "22EHB5z2GwYNPA1wZ3LtL4",
+      "uri": "spotify:track:22EHB5z2GwYNPA1wZ3LtL4"
+    }
+  ]
+}
+```
+
+---
+
 ## Requirements
-- Spotify Premium account (required by Spotify's Mercury audio key servers).
+
+- **Spotify Premium account**: Required by Spotify's Mercury audio key servers to decrypt full-length tracks.
