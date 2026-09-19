@@ -90,6 +90,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
+          cache-all-targets: "true"
+          cache-on-failure: true
 
       - name: Build Release Binary
         run: cargo build --release --bin spotstream --target ${{ matrix.target }}
