@@ -21,13 +21,29 @@ A lightweight CLI adapter built on `librespot` for direct Spotify audio streamin
 
 ## Installation
 
-### Build from Source
+### Install as CLI Tool
 ```bash
+# Install globally via cargo
+cargo install spotstream
+
+# Or build from source
 git clone https://github.com/caya8205-2/spotstream.git
 cd spotstream
 cargo build --release
 ```
 The compiled binary will be located at `target/release/spotstream.exe` (or `target/release/spotstream` on Unix).
+
+### Install as Library
+Run the following Cargo command in your project directory:
+```bash
+cargo add spotstream
+```
+
+Or add the following line to your `Cargo.toml`:
+```toml
+[dependencies]
+spotstream = "0.1.0"
+```
 
 ---
 
