@@ -1,10 +1,8 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use serde::Serialize;
+use spotstream::{auth, player};
 use std::path::PathBuf;
-
-mod auth;
-mod player;
 
 #[derive(Parser)]
 #[command(name = "spotstream")]

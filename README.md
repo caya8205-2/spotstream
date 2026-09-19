@@ -1,20 +1,10 @@
-<div align="center">
-  <br/>
-  <h1>spotstream</h1>
-  <p align="center">
-    <strong>
-      A lightweight, headless Spotify audio streaming CLI adapter built on <a href="https://github.com/librespot-org/librespot">librespot</a>.
-    </strong>
-  </p>
+# spotstream
 
-  [![Rust](https://img.shields.io/badge/Rust-1.85+-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
-  [![librespot](https://img.shields.io/badge/librespot-0.8.0-1DB954?logo=spotify&logoColor=white)](https://github.com/librespot-org/librespot)
-  [![License](https://img.shields.io/badge/License-MIT-white)](./LICENSE)
+[![Rust](https://img.shields.io/badge/Rust-1.85+-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![librespot](https://img.shields.io/badge/librespot-0.8.0-1DB954?logo=spotify&logoColor=white)](https://github.com/librespot-org/librespot)
+[![License](https://img.shields.io/badge/License-MIT-white)](./LICENSE)
 
-  <p align="center">
-    <code>spotstream</code> decodes Spotify audio directly from Spotify CDN and streams raw PCM (<code>s16le</code>, 44.1kHz stereo) straight to <code>stdout</code>. Built for Discord bots, media servers, and FFmpeg pipelines.
-  </p>
-</div>
+A lightweight CLI adapter built on `librespot` for direct Spotify audio streaming, metadata extraction, and playlist fetching. It outputs raw PCM directly to `stdout`, designed for Discord bots, media servers, and FFmpeg pipelines.
 
 ---
 
@@ -22,7 +12,7 @@
 
 - **Direct Spotify Decryption**: Fetches audio keys via Spotify's Mercury/AP protocol and decrypts 320kbps Vorbis streams without YouTube conversion or scraping.
 - **Raw PCM Pipe**: Emits decoded `s16le` 44100Hz stereo PCM directly to `stdout` for zero-latency FFmpeg transcoding.
-- **RFC 8628 Device Pairing**: Quick one-time authorization via `https://spotify.com/pair`. No plaintext credentials stored in configs.
+- **RFC 8628 Device Pairing**: One-time authorization via `https://spotify.com/pair`. No plaintext credentials in configs.
 - **Personalized Playlist Support**: Reads standard playlists as well as dynamic personalized playlists (Daily Mix, Made for You, Discover Weekly) via internal Mercury endpoints.
 - **Machine-Readable CLI**: Supports JSON output for track info, playlist dumps, and headless OAuth pairing (`auth-code` / `auth-poll`).
 - **Persistent Session Cache**: Automatically reuses saved tokens from `%LOCALAPPDATA%/spotstream/cache` (Windows) or `~/.local/share/spotstream/cache` (Linux/macOS).
@@ -66,7 +56,7 @@ spotstream status
 ### 3. Stream Audio to FFmpeg (Stdout Pipe)
 ```bash
 # Pipe raw PCM into FFmpeg
-spotstream stream "4cOdK2wGLETKBW3PvgPWqT" | ffmpeg -f s16le -ar 44100 -ac 2 -i pipe:0 -c:a libopus -f ogg output.ogg
+spotstream stream "4cOdK2wGLETKBW3PvgPWqT" | ffmpeg -f s16le -ar 44100 -ac 2 -i pipe:0 -c:a libopus -b:a 128k -f ogg output.ogg
 ```
 
 ### 4. Fetch Track Metadata
@@ -104,6 +94,15 @@ Output:
     }
   ]
 }
+```
+
+---
+
+## Documentation
+
+Generate and view documentation locally:
+```bash
+cargo doc --no-deps --open
 ```
 
 ---

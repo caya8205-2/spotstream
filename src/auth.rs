@@ -1,3 +1,8 @@
+//! Spotify Device Authorization flow implementation (RFC 8628).
+//!
+//! Provides headless one-time pairing via `https://spotify.com/pair`,
+//! returning tokens and saving reusable credentials.
+
 use anyhow::{Context, Result, bail};
 use librespot::core::{authentication::Credentials, cache::Cache, config::SessionConfig, session::Session};
 use serde::{Deserialize, Serialize};
@@ -8,13 +13,20 @@ const DEVICE_AUTH_URL: &str = "https://accounts.spotify.com/oauth2/device/author
 const TOKEN_URL: &str = "https://accounts.spotify.com/api/token";
 const SCOPES: &str = "streaming,user-read-email,user-read-private,user-library-read";
 
+/// Device authorization response structure from Spotify's RFC 8628 endpoint.
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct DeviceAuthResponse {
+    /// Internal device code used for token polling
     pub device_code: String,
+    /// 6-character user pairing code displayed to the user
     pub user_code: String,
+    /// Verification URL (typically `https://spotify.com/pair`)
     pub verification_uri: String,
+    /// Direct verification URL including pre-filled user code
     pub verification_uri_complete: Option<String>,
+    /// Lifetime of authorization code in seconds
     pub expires_in: u64,
+    /// Minimum polling interval required by Spotify in seconds
     #[serde(default = "default_interval")]
     pub interval: u64,
 }
@@ -41,6 +53,7 @@ struct TokenErrorResponse {
     error_description: Option<String>,
 }
 
+/// Request a new device pairing code and URL from Spotify's authorization server.
 pub async fn request_pairing_code() -> Result<DeviceAuthResponse> {
     let client = reqwest::Client::new();
     let res = client
@@ -67,6 +80,7 @@ pub async fn request_pairing_code() -> Result<DeviceAuthResponse> {
     Ok(auth_data)
 }
 
+/// Poll Spotify until user approves the device pairing code, then connect and save session credentials.
 pub async fn poll_and_save(
     cache_dir: &Path,
     device_code: &str,
@@ -150,6 +164,7 @@ pub async fn poll_and_save(
     Ok(())
 }
 
+/// Run interactive device pairing by displaying the user code and opening the default browser.
 pub async fn run_device_pairing(cache_dir: &Path) -> Result<()> {
     eprintln!("[spotstream] Requesting device authorization from Spotify...");
     let auth_data = request_pairing_code().await?;

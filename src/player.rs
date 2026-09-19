@@ -1,3 +1,5 @@
+//! Spotify playback, track streaming, and metadata fetching module.
+
 use anyhow::{Context, Result};
 use librespot::core::{
     SpotifyUri,
@@ -16,6 +18,7 @@ use librespot::playback::{
 use serde::Serialize;
 use std::path::Path;
 
+/// Parse a track ID from raw base62 string, Spotify URI (`spotify:track:...`), or web URL.
 pub fn parse_track_id(input: &str) -> Result<SpotifyId> {
     let clean = input.trim();
     let id_str = if clean.starts_with("spotify:track:") {
@@ -31,6 +34,7 @@ pub fn parse_track_id(input: &str) -> Result<SpotifyId> {
         .map_err(|e| anyhow::anyhow!("Invalid Spotify track ID or URI '{id_str}': {e}"))
 }
 
+/// Parse a playlist ID from raw base62 string, Spotify URI (`spotify:playlist:...`), or web URL.
 pub fn parse_playlist_id(input: &str) -> Result<SpotifyId> {
     let clean = input.trim();
     let id_str = if clean.starts_with("spotify:playlist:") {
@@ -46,6 +50,7 @@ pub fn parse_playlist_id(input: &str) -> Result<SpotifyId> {
         .map_err(|e| anyhow::anyhow!("Invalid Spotify playlist ID or URI '{id_str}': {e}"))
 }
 
+/// Initialize a connected Spotify session using cached credentials.
 pub async fn get_session(cache_dir: &Path) -> Result<Session> {
     let cache = Cache::new(Some(cache_dir.to_path_buf()), None, None, None)
         .context("Failed to initialize Spotify cache")?;
@@ -65,15 +70,22 @@ pub async fn get_session(cache_dir: &Path) -> Result<Session> {
     Ok(session)
 }
 
+/// Track metadata information container.
 #[derive(Serialize)]
 pub struct TrackInfo {
+    /// Base62 Spotify track ID
     pub id: String,
+    /// Track title
     pub title: String,
+    /// List of artist names
     pub artists: Vec<String>,
+    /// Album name
     pub album: String,
+    /// Track duration in milliseconds
     pub duration_ms: i32,
 }
 
+/// Fetch track metadata by ID, URI, or URL.
 pub async fn fetch_track_info(cache_dir: &Path, track_input: &str) -> Result<TrackInfo> {
     let track_id = parse_track_id(track_input)?;
     let session = get_session(cache_dir).await?;
@@ -98,6 +110,7 @@ pub async fn fetch_track_info(cache_dir: &Path, track_input: &str) -> Result<Tra
     Ok(info)
 }
 
+/// Stream decoded audio (PCM s16le 44100Hz stereo) directly to standard output.
 pub async fn stream_track(cache_dir: &Path, track_input: &str) -> Result<()> {
     let track_id = parse_track_id(track_input)?;
     let session = get_session(cache_dir).await?;
@@ -127,19 +140,27 @@ pub async fn stream_track(cache_dir: &Path, track_input: &str) -> Result<()> {
     Ok(())
 }
 
+/// Item inside a playlist track list.
 #[derive(Serialize)]
 pub struct PlaylistItemInfo {
+    /// Base62 Spotify track ID
     pub id: String,
+    /// Canonical Spotify track URI (`spotify:track:...`)
     pub uri: String,
 }
 
+/// Playlist metadata and list of tracks.
 #[derive(Serialize)]
 pub struct PlaylistInfo {
+    /// Playlist title
     pub name: String,
+    /// Playlist description
     pub description: String,
+    /// List of contained tracks
     pub tracks: Vec<PlaylistItemInfo>,
 }
 
+/// Fetch playlist metadata and track IDs (supports personalized Daily Mixes).
 pub async fn fetch_playlist_info(cache_dir: &Path, playlist_input: &str) -> Result<PlaylistInfo> {
     let playlist_id = parse_playlist_id(playlist_input)?;
     let session = get_session(cache_dir).await?;
