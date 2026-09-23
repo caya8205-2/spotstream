@@ -10,14 +10,19 @@ use librespot::core::{
 };
 use librespot::metadata::{Metadata, Track, Playlist};
 use librespot::playback::{
-    audio_backend,
+    audio_backend::{self, Sink, SinkAsBytes, SinkError, SinkResult},
     config::{AudioFormat, Bitrate, PlayerConfig},
+    convert::Converter,
+    decoder::AudioPacket,
     mixer::NoOpVolume,
     player::{Player, PlayerEvent},
 };
 use serde::Serialize;
 use std::path::Path;
+use std::sync::mpsc::{channel, Sender};
 use std::time::Duration;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::TcpListener;
 
 /// Parse a track ID from raw base62 string, Spotify URI (`spotify:track:...`), or web URL.
 pub fn parse_track_id(input: &str) -> Result<SpotifyId> {
@@ -244,4 +249,119 @@ pub async fn fetch_playlist_info(cache_dir: &Path, playlist_input: &str) -> Resu
 
     session.shutdown();
     Ok(info)
+}
+
+struct ChannelSink {
+    sender: Sender<Vec<u8>>,
+    #[allow(dead_code)]
+    format: AudioFormat,
+}
+
+impl Sink for ChannelSink {
+    fn write(&mut self, packet: AudioPacket, converter: &mut Converter) -> SinkResult<()> {
+        match packet {
+            AudioPacket::Samples(samples) => {
+                let samples_s16 = converter.f64_to_s16(&samples);
+                let bytes = unsafe {
+                    std::slice::from_raw_parts(
+                        samples_s16.as_ptr() as *const u8,
+                        samples_s16.len() * std::mem::size_of::<i16>(),
+                    )
+                };
+                self.write_bytes(bytes)
+            }
+            AudioPacket::Raw(samples) => self.write_bytes(&samples),
+        }
+    }
+}
+
+impl SinkAsBytes for ChannelSink {
+    fn write_bytes(&mut self, data: &[u8]) -> SinkResult<()> {
+        self.sender
+            .send(data.to_vec())
+            .map_err(|e| SinkError::OnWrite(e.to_string()))
+    }
+}
+
+/// Run a persistent Spotify streaming daemon that keeps the Spotify AccessPoint session warm in RAM.
+/// Serves decoded PCM s16le 44100Hz stereo directly over a local TCP socket for sub-second playback start.
+pub async fn run_daemon(cache_dir: &Path, port: u16) -> Result<()> {
+    let session = get_session(cache_dir).await?;
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", port))
+        .await
+        .with_context(|| format!("Failed to bind spotstream daemon to 127.0.0.1:{}", port))?;
+
+    // Signal to parent process that daemon is warm and listening
+    println!("{{\"status\":\"ready\",\"port\":{}}}", port);
+
+    loop {
+        let (mut socket, _) = match listener.accept().await {
+            Ok(conn) => conn,
+            Err(e) => {
+                eprintln!("[spotstream daemon] Accept error: {e}");
+                continue;
+            }
+        };
+
+        let session = session.clone();
+        tokio::spawn(async move {
+            let (reader, mut writer) = socket.split();
+            let mut buf_reader = BufReader::new(reader);
+            let mut line = String::new();
+
+            if buf_reader.read_line(&mut line).await.is_err() || line.trim().is_empty() {
+                return;
+            }
+
+            let line_trimmed = line.trim();
+            let track_input = if let Some(stripped) = line_trimmed.strip_prefix("STREAM ") {
+                stripped.trim()
+            } else {
+                line_trimmed
+            };
+
+            let track_id = match parse_track_id(track_input) {
+                Ok(id) => id,
+                Err(e) => {
+                    eprintln!("[spotstream daemon] Invalid track ID '{track_input}': {e}");
+                    return;
+                }
+            };
+
+            let (tx, rx) = channel();
+            let player_config = PlayerConfig {
+                bitrate: Bitrate::Bitrate320,
+                gapless: false,
+                ..Default::default()
+            };
+
+            let player = Player::new(player_config, session.clone(), Box::new(NoOpVolume), move || {
+                Box::new(ChannelSink {
+                    sender: tx,
+                    format: AudioFormat::S16,
+                })
+            });
+
+            let track_uri = SpotifyUri::Track { id: track_id };
+            player.load(track_uri, true, 0);
+
+            // Channel bridging thread: librespot callback thread -> tokio async task
+            let (pcm_tx, mut pcm_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(64);
+            std::thread::spawn(move || {
+                while let Ok(bytes) = rx.recv() {
+                    if pcm_tx.blocking_send(bytes).is_err() {
+                        break;
+                    }
+                }
+            });
+
+            while let Some(bytes) = pcm_rx.recv().await {
+                if writer.write_all(&bytes).await.is_err() {
+                    break;
+                }
+            }
+
+            player.stop();
+        });
+    }
 }

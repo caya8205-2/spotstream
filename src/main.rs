@@ -63,6 +63,13 @@ enum Commands {
         #[arg(short, long, default_value = "playlist-read-private,playlist-read-collaborative,streaming")]
         scopes: String,
     },
+
+    /// Run a persistent Spotify streaming daemon that keeps session warm in RAM
+    Daemon {
+        /// Local port to listen on (default: 3135)
+        #[arg(short, long, default_value_t = 3135)]
+        port: u16,
+    },
 }
 
 #[derive(Serialize)]
@@ -145,6 +152,9 @@ async fn main() -> Result<()> {
             let token = session.token_provider().get_token(&scopes).await?;
             println!("{}", token.access_token);
             session.shutdown();
+        }
+        Commands::Daemon { port } => {
+            player::run_daemon(&cache_dir, port).await?;
         }
     }
 
