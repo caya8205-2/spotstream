@@ -53,14 +53,23 @@ pub fn parse_playlist_id(input: &str) -> Result<SpotifyId> {
 
 /// Initialize a connected Spotify session using cached credentials.
 pub async fn get_session(cache_dir: &Path) -> Result<Session> {
-    let cache = Cache::new(Some(cache_dir.to_path_buf()), None, None, None)
+    let files_dir = cache_dir.join("files");
+    let cache = Cache::new(Some(cache_dir.to_path_buf()), None, Some(files_dir), None)
         .context("Failed to initialize Spotify cache")?;
 
     let credentials = cache.credentials().context(
         "No saved Spotify credentials found. Please run `spotstream auth` first to pair your account.",
     )?;
 
-    let session_config = SessionConfig::default();
+    // Use a stable device_id derived from machine/username so Spotify doesn't treat every run as a new login
+    let mut session_config = SessionConfig::default();
+    let cred_path = cache_dir.join("credentials.json");
+    if let Ok(meta) = std::fs::metadata(&cred_path) {
+        if let Ok(modified) = meta.modified() {
+            let dur = modified.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+            session_config.device_id = format!("spotstream-{:x}", dur);
+        }
+    }
     let session = Session::new(session_config, Some(cache));
 
     session
