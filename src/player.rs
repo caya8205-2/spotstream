@@ -286,6 +286,12 @@ impl SinkAsBytes for ChannelSink {
 /// Run a persistent Spotify streaming daemon that keeps the Spotify AccessPoint session warm in RAM.
 /// Serves decoded PCM s16le 44100Hz stereo directly over a local TCP socket for sub-second playback start.
 pub async fn run_daemon(cache_dir: &Path, port: u16) -> Result<()> {
+    // Tune audio fetch parameters for low-latency startup (150ms buffer instead of 1000ms)
+    let mut fetch_params = librespot::audio::AudioFetchParams::default();
+    fetch_params.read_ahead_before_playback = Duration::from_millis(150);
+    fetch_params.initial_ping_time_estimate = Duration::from_millis(100);
+    let _ = librespot::audio::AudioFetchParams::set(fetch_params);
+
     let session = get_session(cache_dir).await?;
     let listener = TcpListener::bind(format!("127.0.0.1:{}", port))
         .await
