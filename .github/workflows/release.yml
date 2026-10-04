@@ -54,19 +54,19 @@ jobs:
         include:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact_name: spotstream-windows-x86_64.zip
+            artifact_name: spotstream-windows-x86_64.exe
             binary_name: spotstream.exe
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact_name: spotstream-linux-x86_64.tar.gz
+            artifact_name: spotstream-linux-x86_64
             binary_name: spotstream
           - os: macos-latest
             target: x86_64-apple-darwin
-            artifact_name: spotstream-macos-x86_64.tar.gz
+            artifact_name: spotstream-macos-x86_64
             binary_name: spotstream
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact_name: spotstream-macos-aarch64.tar.gz
+            artifact_name: spotstream-macos-aarch64
             binary_name: spotstream
 
     steps:
@@ -94,19 +94,17 @@ jobs:
       - name: Build Release Binary
         run: cargo build --release --bin spotstream --target ${{ matrix.target }}
 
-      - name: Package Binary (Windows)
+      - name: Prepare Binary (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $src = "target/${{ matrix.target }}/release/${{ matrix.binary_name }}"
-          Compress-Archive -Path $src -DestinationPath "${{ matrix.artifact_name }}"
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" -Destination "${{ matrix.artifact_name }}"
 
-      - name: Package Binary (Unix)
+      - name: Prepare Binary (Unix)
         if: runner.os != 'Windows'
         run: |
-          cd "target/${{ matrix.target }}/release"
-          chmod +x "${{ matrix.binary_name }}"
-          tar -czvf "../../../${{ matrix.artifact_name }}" "${{ matrix.binary_name }}"
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" "${{ matrix.artifact_name }}"
+          chmod +x "${{ matrix.artifact_name }}"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
