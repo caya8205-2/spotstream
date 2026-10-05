@@ -1,6 +1,6 @@
 [package]
 name = "spotstream"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Caya <caya8205-2@users.noreply.github.com>"]
 description = "Fast Spotify streaming CLI adapter for Discord bots and audio pipelines"
